@@ -29,6 +29,8 @@ This utilizes a **zero-knowledge proof** — where the receiver proves they know
 - 🦀 Rust (`axum` backend)
 - 🖥️ Yew (Rust/WASM frontend)
 - 🔐 SHA256 hashing (`sha2` crate)
+- 🟦 TypeScript – Strongly typed JavaScript for scalable and maintainable frontend + backend development
+- 🌘 Midnight SDK – Privacy-preserving smart contract platform ideal for secure dApps and confidential P2P logic
 - 🐳 Docker – for isolated, reproducible development environments
 - 🧠 Zero-knowledge-style verification logic
 
