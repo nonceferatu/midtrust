@@ -1,47 +1,43 @@
-"about" => html! {
-    <>
-        <h4 class="mb-3">{"About MidTrust"}</h4>
-        <p>
-            {"MidTrust is a peer-to-peer escrow simulator designed to help two users — a sender and a receiver — complete a transaction securely without relying on trust or intermediaries. "}
-            {"It’s inspired by zero-knowledge cryptography, where users can prove they know something without revealing the actual data."}
-        </p>
+# 🛡️ MidTrust
 
-        <h5 class="mt-4">{"🔄 What Happens Behind the Scenes"}</h5>
-        <ol>
-            <li>
-                {"The sender fills in their wallet, the receiver’s wallet, and a shared secret — think of this secret like a one-time password or deal passcode."}
-            </li>
-            <li>
-                {"The system immediately hashes the secret using a secure algorithm (SHA256). A hash is like a digital fingerprint: it uniquely represents the input but can't be reversed to reveal the secret itself."}
-            </li>
-            <li>
-                {"This hashed secret is stored along with the sender, receiver, and deal amount as a new deal marked 'Pending'."}
-            </li>
-            <li>
-                {"The receiver later submits their version of the secret. The system hashes that input and compares it to the original stored hash."}
-            </li>
-            <li>
-                {"If it matches exactly, the system updates the deal's status from 'Pending' to 'Released', indicating the transaction has been successfully completed."}
-            </li>
-        </ol>
+**MidTrust** is a zero-knowledge-inspired peer-to-peer escrow simulator that enables two users — a sender and a receiver — to complete a transaction securely and **trustlessly**, without relying on third parties or intermediaries.
 
-        <p>
-            {"At no point is the actual secret stored or visible to the system — only its hash is kept. This mimics the way zero-knowledge proofs work: proving something is correct, without exposing the sensitive input itself."}
-        </p>
+---
 
-        <h5 class="mt-4">{"🔐 Why It’s Trustless"}</h5>
-        <p>
-            {"The receiver can’t fake the deal because only the correct secret — known in advance — will generate the correct hash. "}
-            {"And the sender doesn’t have to manually confirm anything, because the proof (the matching hash) does that verification automatically."}
-        </p>
+## 🔍 What It Does
 
-        <h5 class="mt-4">{"🌐 Use Cases"}</h5>
-        <ul>
-            <li>{"Secure freelance payments that only go through once the work is delivered"}</li>
-            <li>{"Deposits for housing or rentals that unlock once terms are met"}</li>
-            <li>{"Item or digital asset trades (games, NFTs, files)"}</li>
-            <li>{"DAO-based micro agreements, promises, or rewards"}</li>
-        </ul>
-    </>
-},
-_ => html! { <p>{"Invalid tab"}</p> }
+MidTrust allows the **sender** to create a deal using a secret (like a passphrase). The system generates a **hash** from that secret and stores it with the deal (including sender, receiver, and amount). Later, the **receiver** must submit the correct secret to complete the transaction.
+
+This mirrors a **zero-knowledge proof** — where the receiver proves they know a secret **without revealing it**, and the system can verify it **without ever storing or seeing the secret itself**.
+
+---
+
+## 🔁 How It Works
+
+1. The sender inputs their wallet, the receiver’s wallet, a secret, and the deal amount.
+2. The system hashes the secret using SHA256 and creates a deal with `Pending` status.
+3. The receiver, who has the original secret, submits it to claim the deal.
+4. If the hashed version of the submitted secret matches the stored hash, the deal is marked as `Released`.
+
+✅ No secrets are stored.  
+✅ The match between hashes acts as a **zero-knowledge-style proof**.
+
+---
+
+## ⚙️ Built With
+
+- 🦀 Rust (`axum` backend)
+- 🖥️ Yew (Rust/WASM frontend)
+- 🔐 SHA256 hashing (`sha2` crate)
+- 🧠 Zero-knowledge-style verification logic
+
+---
+
+## 🌐 Use Cases
+
+- 🔒 Secure freelance transactions
+- 🏠 Rental or deposit agreements
+- 🎮 In-game or digital item exchanges
+- 🗳️ DAO micro-contracts or bounty proofs
+
+---
