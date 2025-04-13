@@ -1,19 +1,10 @@
-use axum::{
-    routing::{get, post},
-    http::Method,
-    Json, Router, extract::State,
-};
+use actix_cors::Cors;
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    sync::{Arc, Mutex},
-};
 use sha2::{Sha256, Digest};
-use tower_http::cors::{CorsLayer, Any};
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
-// Deal data structure
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Deal {
     id: String,
@@ -21,123 +12,93 @@ struct Deal {
     bob: String,
     hash_commit: String,
     amount: u64,
-    status: String, // "Pending", "Locked", "Released", "Cancelled"
+    status: String, // "Pending", "Released"
 }
 
-// Database type - in-memory storage
-type Db = Arc<Mutex<HashMap<String, Deal>>>;
-
-// Request payload for creating a deal
 #[derive(Debug, Deserialize)]
-struct CreateDealPayload {
+struct CreateDealRequest {
     alice: String,
     bob: String,
-    secret_hash: String, // Pre-hashed secret
+    secret_hash: String,
     amount: u64,
 }
 
-// Request payload for submitting a proof
 #[derive(Debug, Deserialize)]
-struct SubmitProofPayload {
+struct SubmitProofRequest {
     id: String,
     secret: String,
 }
 
-// Response for listing deals
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct DealsResponse {
     deals: Vec<Deal>,
 }
 
-#[tokio::main]
-async fn main() {
-    // Initialize in-memory database
-    let db: Db = Arc::new(Mutex::new(HashMap::new()));
-    
-    // Configure CORS
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods([Method::GET, Method::POST])
-        .allow_headers(Any);
-    
-    // Build router with routes
-    let app = Router::new()
-        .route("/deals", get(list_deals))
-        .route("/deals", post(create_deal))
-        .route("/proof", post(submit_proof))
-        .with_state(db)
-        .layer(cors);
+type DealsState = Arc<Mutex<Vec<Deal>>>;
 
-    // Start server
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("🚀 Backend running at http://{}", addr);
-    
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
-}
+async fn create_deal(data: web::Json<CreateDealRequest>, deals: web::Data<DealsState>) -> impl Responder {
+    let new_id = Uuid::new_v4().to_string();
+    let mut deals = deals.lock().unwrap();
 
-// Handler to list all deals
-async fn list_deals(State(db): State<Db>) -> Json<DealsResponse> {
-    let deals = db.lock().unwrap().values().cloned().collect();
-    Json(DealsResponse { deals })
-}
-
-// Handler to create a new deal
-async fn create_deal(
-    State(db): State<Db>,
-    Json(payload): Json<CreateDealPayload>,
-) -> Json<Deal> {
     let deal = Deal {
-        id: Uuid::new_v4().to_string(),
-        alice: payload.alice,
-        bob: payload.bob,
-        hash_commit: payload.secret_hash,
-        amount: payload.amount,
+        id: new_id.clone(),
+        alice: data.alice.clone(),
+        bob: data.bob.clone(),
+        hash_commit: data.secret_hash.clone(),
+        amount: data.amount,
         status: "Pending".to_string(),
     };
 
-    println!("🔐 Deal created: {}", deal.id);
-    println!("   → Alice: {}", deal.alice);
-    println!("   → Bob: {}", deal.bob);
-    println!("   → Amount: {}", deal.amount);
-    println!("   → Status: {}", deal.status);
-    
-    // Store the deal in our database
-    db.lock().unwrap().insert(deal.id.clone(), deal.clone());
+    println!("🔐 Created deal {} between {} → {} for {} tokens", new_id, deal.alice, deal.bob, deal.amount);
 
-    Json(deal)
+    deals.push(deal.clone());
+    HttpResponse::Ok().json(deal)
 }
 
-// Handler to submit a proof and verify it
-async fn submit_proof(
-    State(db): State<Db>,
-    Json(payload): Json<SubmitProofPayload>,
-) -> Json<Option<Deal>> {
-    let mut db = db.lock().unwrap();
+async fn submit_proof(data: web::Json<SubmitProofRequest>, deals: web::Data<DealsState>) -> impl Responder {
+    let mut deals = deals.lock().unwrap();
 
-    // Find the deal by ID
-    if let Some(deal) = db.get_mut(&payload.id) {
-        // Compute hash of the provided secret
+    if let Some(deal) = deals.iter_mut().find(|d| d.id == data.id) {
         let mut hasher = Sha256::new();
-        hasher.update(payload.secret.as_bytes());
-        let computed_hash = format!("{:x}", hasher.finalize());
+        hasher.update(data.secret.as_bytes());
+        let hash = hasher.finalize();
+        let computed_hash = format!("{:x}", hash);
 
-        println!("🔍 Verifying proof for deal: {}", deal.id);
-        println!("   → Stored hash: {}", deal.hash_commit);
-        println!("   → Computed hash: {}", computed_hash);
-        
-        // Compare hashes - this is our simulated "ZK proof verification"
         if deal.status == "Pending" && computed_hash == deal.hash_commit {
-            // In a real ZK system, we would verify a proof here
-            println!("✅ Proof verified! Release funds");
+            println!("✅ Proof accepted for deal {}", deal.id);
             deal.status = "Released".to_string();
-            return Json(Some(deal.clone()));
+            HttpResponse::Ok().json(Some(deal.clone()))
         } else {
-            println!("❌ Proof invalid or deal not pending");
+            println!("❌ Proof rejected for deal {}", deal.id);
+            HttpResponse::Ok().json(None::<Deal>)
         }
     } else {
-        println!("❌ Deal not found: {}", payload.id);
+        println!("⚠️ Deal not found for ID: {}", data.id);
+        HttpResponse::NotFound().body("Deal not found")
     }
+}
 
-    Json(None)
+async fn list_deals(deals: web::Data<DealsState>) -> impl Responder {
+    let deals = deals.lock().unwrap();
+    HttpResponse::Ok().json(DealsResponse {
+        deals: deals.clone(),
+    })
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    let deals: DealsState = Arc::new(Mutex::new(Vec::new()));
+    println!("🚀 zkP2P backend running at http://localhost:3000");
+
+    HttpServer::new(move || {
+        App::new()
+            .app_data(web::Data::new(deals.clone()))
+            .wrap(Cors::permissive())
+            .route("/deals", web::post().to(create_deal))
+            .route("/proof", web::post().to(submit_proof))
+            .route("/deals", web::get().to(list_deals))
+    })
+    .bind(("127.0.0.1", 3000))?
+    .run()
+    .await
 }

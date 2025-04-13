@@ -1,0 +1,8 @@
+{
+  "version": 3,
+  "file": "index.cjs",
+  "sourceRoot": "../../../",
+  "sources": ["escrow.compact", "compiler/standard-library.compact"],
+  "names": [],
+  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;EAWA;;;;;;;;;;MAQA,AAAA,WAMC;;;;cAN0B,eAAwB;;;;;;;;;;;;;;;;yCAAxB,eAAwB;;;;;;;;;8CAAxB,eAAwB;;;OAMlD;MAED,AAAA,YAQC;;;;cAR2B,sBAA+B;;;;;;;;;;;;;;;;yCAA/B,sBAA+B;;;;;;;;;+CAA/B,sBAA+B;;;OAQ1D;MAED,AAAA,UAEC;;;;cAFyB,IAAa;cAAE,UAAmB;;;;;;;;;;;;;;;;;;;;;;yCAAlC,IAAa,+BAAE,UAAmB;;;;;;;;;6CAAlC,IAAa;6CAAE,UAAmB;;;OAE3D;;;;;;GAxBA;EAJD;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;IALA;;;;;;;;;uDAA2B;IAC3B;;;;;;;;;uDAA4C;IAC5C;;;;;;;;;uDAAgC;IAChC;;;;;;;;;uDAAgC;IAG5B;;;;;;;;;uDAAK;UACL,KAAW;IAAX;;;;;;;yGAAA,KAAW;;uDAAA;UACX,KAAQ;IAAR;;;;;;;;;;2EAAA,KAAQ;;;;sDAAA;;;;;;;GACX;ECRD,AAAA,oCAAuB;mCACkB;;EAEzC,AAAA;;;EDOA,AAAA,oBAAsC;;0DAAtC,gBAAsC;;;;;;;;;;;;;GAAA;EAEtC,AAAA,eAMC,4BAN0B,eAAwB;oDACxC;;;;;;;;;;;uGAAK;;;;UAEZ,KAAM;;;;;4GAA2C;;;;;;;;;;;+JAAQ;IAAzD;;;;;;;yGAAA,KAAM;;uDAAA;UACN,KAAW,4CAAmB,eAAa;IAA3C;;;;;;;yGAAA,KAAW;;uDAAA;IACX;;;;;;;;;uDAAK;;GACR;EAED,AAAA,gBAQC,4BAR2B,sBAA+B;oDAChD;;;;;;;;;;;uGAAK;;;;mEAEL;;;;;;;;;;;sHAAW;;;yDAAoB,sBAAoB;;IAE1D;;;;;;;;;uDAAK;UACL,KAAW;IAAX;;;;;;;yGAAA,KAAW;;uDAAA;UACX,KAAQ;IAAR;;;;;;;;;;2EAAA,KAAQ;;;;sDAAA;;GACX;EAED,AAAA,cAEC,4BAFyB,IAAa,EAAE,UAAmB,WACxC,IAAE,GACrB;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;IAjCD;qCAAA;;;;;;;;;;;wFAA2B;KAAA;IAC3B;qCAAA;;;;;;;;;;;wFAA4C;KAAA;IAC5C;qCAAA;;;;;;;;;;;wFAAgC;KAAA;IAChC;qCAAA;;;;;;;;;;;wFAAgC;KAAA;;;;;;;;;;;;;;;;;;"
+}

@@ -1,0 +1,40 @@
+pragma language_version >= 0.14.0;
+
+import CompactStandardLibrary;
+
+export enum STATE { vacant, occupied }
+
+export ledger state: STATE;
+export ledger secret_hash: Maybe<Bytes<32>>;
+export ledger instance: Counter;
+export ledger poster: Bytes<32>;
+
+constructor() {
+    state = STATE.vacant;
+    secret_hash = none<Bytes<32>>();
+    instance.increment(1);
+}
+
+witness local_secret_key(): Bytes<32>;
+
+export circuit create_deal(provided_hash: Bytes<32>): [] {
+    assert state == STATE.vacant
+        "Deal already active.";
+    poster = disclose(public_key(local_secret_key(), instance as Field as Bytes<32>));
+    secret_hash = some<Bytes<32>>(provided_hash);
+    state = STATE.occupied;
+}
+
+export circuit verify_proof(provided_secret_hash: Bytes<32>): [] {
+    assert state == STATE.occupied
+        "No active deal.";
+    assert secret_hash == some<Bytes<32>>(provided_secret_hash)
+        "Hash mismatch – invalid secret or tampering.";
+    state = STATE.vacant;
+    secret_hash = none<Bytes<32>>();
+    instance.increment(1);
+}
+
+export circuit public_key(sk: Bytes<32>, instance: Bytes<32>): Bytes<32> {
+    return disclose(sk); // Just for testing — replace with real identity logic later
+}
