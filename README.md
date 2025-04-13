@@ -1,6 +1,6 @@
 # 🛡️ MidTrust
 
-**MidTrust** is a zero-knowledge-inspired peer-to-peer escrow simulator that enables two users — a sender and a receiver — to complete a transaction securely and **trustlessly**, without relying on third parties or intermediaries.
+**MidTrust** is a zero-knowledge peer-to-peer escrow service that enables two users — a sender and a receiver — to complete a transaction securely and **trustlessly**, without relying on third parties or intermediaries.
 
 ---
 
@@ -8,7 +8,7 @@
 
 MidTrust allows the **sender** to create a deal using a secret (like a passphrase). The system generates a **hash** from that secret and stores it with the deal (including sender, receiver, and amount). Later, the **receiver** must submit the correct secret to complete the transaction.
 
-This mirrors a **zero-knowledge proof** — where the receiver proves they know a secret **without revealing it**, and the system can verify it **without ever storing or seeing the secret itself**.
+This utilizes a **zero-knowledge proof** — where the receiver proves they know a secret **without revealing it**, and the system can verify it **without ever storing or seeing the secret itself**.
 
 ---
 
@@ -29,6 +29,7 @@ This mirrors a **zero-knowledge proof** — where the receiver proves they know 
 - 🦀 Rust (`axum` backend)
 - 🖥️ Yew (Rust/WASM frontend)
 - 🔐 SHA256 hashing (`sha2` crate)
+- 🐳 Docker – for isolated, reproducible development environments
 - 🧠 Zero-knowledge-style verification logic
 
 ---
