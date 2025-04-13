@@ -1,17 +1,15 @@
 use yew::prelude::*;
-use gloo_net::http::Request;
-use gloo_console::log;
+use yew::use_effect_with;
 use web_sys::HtmlInputElement;
+use gloo_net::http::Request;
+use gloo_dialogs::alert;
+use wasm_bindgen_futures::spawn_local;
 use sha2::{Sha256, Digest};
 use serde::{Deserialize, Serialize};
-use gloo_dialogs::alert;
-use std::rc::Rc;
 
-// API URL - change this if your backend is on a different port
 const API_URL: &str = "http://localhost:3000";
 
-// Deal struct that matches our backend definition
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 struct Deal {
     id: String,
     alice: String,
@@ -21,510 +19,219 @@ struct Deal {
     status: String,
 }
 
-// Payload for creating a deal
-#[derive(Debug, Serialize)]
-struct CreateDealPayload {
-    alice: String,
-    bob: String,
-    secret_hash: String,
-    amount: u64,
-}
-
-// Payload for submitting a proof
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct SubmitProofPayload {
     id: String,
     secret: String,
 }
 
-// Response for listing deals
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct DealsResponse {
     deals: Vec<Deal>,
 }
 
-// Main app component
 #[function_component]
 fn App() -> Html {
-    // State
-    let deals = use_state(|| Vec::<Deal>::new());
-    let alice_name = use_state(|| String::from("Alice"));
-    let bob_name = use_state(|| String::from("Bob"));
-    let amount = use_state(|| 50);
-    let secret = use_state(|| String::from("hunter2"));
-    let proof_secret = use_state(|| String::new());
-    let selected_deal_id = use_state(|| String::new());
-    
-    // Fetch deals on component mount
+    let active_tab = use_state(|| "create".to_string());
+
+    let deals = use_state(|| vec![]);
+    let selected_deal = use_state(|| None::<Deal>);
+    let proof_secret = use_state(|| "".to_string());
+
+    let alice = use_state(|| "".to_string());
+    let bob = use_state(|| "".to_string());
+    let amount = use_state(|| "50".to_string());
+    let secret = use_state(|| "".to_string());
+
+    // Fetch deals on mount
     {
         let deals = deals.clone();
-        use_effect(move || {
-            wasm_bindgen_futures::spawn_local(async move {
-                match fetch_deals().await {
-                    Ok(fetched_deals) => {
-                        deals.set(fetched_deals);
-                    },
-                    Err(err) => {
-                        log!("Error fetching deals:", err);
+        use_effect_with((), move |_| {
+            spawn_local(async move {
+                if let Ok(res) = Request::get(&format!("{}/deals", API_URL))
+                    .send().await
+                {
+                    if let Ok(json) = res.json::<DealsResponse>().await {
+                        deals.set(json.deals);
                     }
                 }
             });
             || ()
-        });        
+        });
     }
-    
-    // Handler for creating a new deal
-    let on_create_deal = {
-        let alice_name = alice_name.clone();
-        let bob_name = bob_name.clone();
-        let secret = secret.clone();
-        let amount = amount.clone();
-        let deals = deals.clone();
-        
-        Callback::from(move |e: SubmitEvent| {
-            e.prevent_default();
-            
-            let alice = (*alice_name).clone();
-            let bob = (*bob_name).clone();
-            let secret_val = (*secret).clone();
-            let amount_val = *amount;
-            let deals = deals.clone();
-            
-            // Hash the secret
-            let secret_hash = hash_secret(&secret_val);
-            
-            // Create the payload
-            let payload = CreateDealPayload {
-                alice,
-                bob,
-                secret_hash,
-                amount: amount_val,
-            };
-            
-            // Send the request
-            wasm_bindgen_futures::spawn_local(async move {
-                match create_deal(payload).await {
-                    Ok(deal) => {
-                        log!("Deal created:", &deal.id);
-                        alert("Deal created successfully!");
-                        
-                        // Update the deals list
-                        match fetch_deals().await {
-                            Ok(fetched_deals) => {
-                                deals.set(fetched_deals);
-                            },
-                            Err(err) => {
-                                log!("Error fetching deals:", err);
-                            }
-                        }
-                    },
-                    Err(err) => {
-                        let msg = err.clone();
-                        log!("Error creating deal:", msg);
-                        alert(&format!("Error creating deal: {}", err));
-                    }
-                }
-            });
-        })
-    };
-    
-    // Handler for submitting a proof
-    let on_submit_proof = {
-        let proof_secret = proof_secret.clone();
-        let selected_deal_id = selected_deal_id.clone();
-        let deals = deals.clone();
-        
-        Callback::from(move |e: SubmitEvent| {
-            e.prevent_default();
-            
-            let secret = (*proof_secret).clone();
-            let deal_id = (*selected_deal_id).clone();
-            let deals = deals.clone();
-            
-            if deal_id.is_empty() {
-                alert("Please select a deal first");
-                return;
-            }
-            
-            if secret.is_empty() {
-                alert("Please enter the secret");
-                return;
-            }
-            
-            let payload = SubmitProofPayload {
-                id: deal_id,
-                secret,
-            };
-            
-            wasm_bindgen_futures::spawn_local(async move {
-                match submit_proof(payload).await {
-                    Ok(Some(deal)) => {
-                        log!("Proof verified for deal:", &deal.id);
-                        alert("Proof verified successfully! Funds released.");
-                        
-                        // Update the deals list
-                        match fetch_deals().await {
-                            Ok(fetched_deals) => {
-                                deals.set(fetched_deals);
-                            },
-                            Err(err) => {
-                                log!("Error fetching deals:", err);
-                            }
-                        }
-                    },
-                    Ok(None) => {
-                        alert("Proof verification failed! The secret is incorrect or deal is already completed.");
-                    },
-                    Err(err) => {
-                        let msg = err.clone();
-                        log!("Error creating deal:", msg);
-                        alert(&format!("Error creating deal: {}", err));
-                    }
-                }
-            });
-        })
-    };
-    
-    // Handle changes to form inputs
-    let on_alice_change = {
-        let alice_name = alice_name.clone();
-        Callback::from(move |e: Event| {
-            let input: HtmlInputElement = e.target_unchecked_into();
-            alice_name.set(input.value());
-        })
-    };
-    
-    let on_bob_change = {
-        let bob_name = bob_name.clone();
-        Callback::from(move |e: Event| {
-            let input: HtmlInputElement = e.target_unchecked_into();
-            bob_name.set(input.value());
-        })
-    };
-    
-    let on_amount_change = {
-        let amount = amount.clone();
-        Callback::from(move |e: Event| {
-            let input: HtmlInputElement = e.target_unchecked_into();
-            let value = input.value().parse::<u64>().unwrap_or(0);
-            amount.set(value);
-        })
-    };
-    
-    let on_secret_change = {
-        let secret = secret.clone();
-        Callback::from(move |e: Event| {
-            let input: HtmlInputElement = e.target_unchecked_into();
-            secret.set(input.value());
-        })
-    };
-    
-    let on_proof_secret_change = {
-        let proof_secret = proof_secret.clone();
-        Callback::from(move |e: Event| {
-            let input: HtmlInputElement = e.target_unchecked_into();
-            let value = input.value();
-            proof_secret.set(value);
-        })
-    };
-    
-    let on_select_deal = {
-        let selected_deal_id = selected_deal_id.clone();
-        Callback::from(move |id: String| {
-            selected_deal_id.set(id);
-        })
-    };
-    
-    html! {
-        <div class="container">
-            <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 rounded">
-                <div class="container-fluid">
-                    <a class="navbar-brand" href="#">{"🧠 zkP2P Escrow"}</a>
-                    <div class="navbar-text text-white">{"Simulated ZK with Hash Verification"}</div>
-                </div>
-            </nav>
-            
-            <div class="row">
-                // Create Deal Form
-                <div class="col-md-5">
-                    <div class="card">
-                        <div class="card-header bg-primary text-white">
-                            {"Create New Deal"}
-                        </div>
-                        <div class="card-body">
-                            <form onsubmit={on_create_deal}>
-                                <div class="mb-3">
-                                    <label for="alice" class="form-label">{"Alice (Sender)"}</label>
-                                    <input 
-                                        type="text"
-                                        class="form-control"
-                                        id="alice"
-                                        value={(*alice_name).clone()}
-                                        oninput={Callback::from({
-                                            let alice_name = alice_name.clone();
-                                            move |e: InputEvent| {
-                                                let input: HtmlInputElement = e.target_unchecked_into();
-                                                alice_name.set(input.value());
-                                            }
-                                        })}
-                                        required=true
-                                    />
-                                </div>
-                                <div class="mb-3">
-                                    <label for="bob" class="form-label">{"Bob (Receiver)"}</label>
-                                    <input 
-                                        type="text"
-                                        class="form-control"
-                                        id="bob"
-                                        value={(*bob_name).clone()}
-                                        oninput={Callback::from({
-                                            let bob_name = bob_name.clone();
-                                            move |e: InputEvent| {
-                                                let input: HtmlInputElement = e.target_unchecked_into();
-                                                bob_name.set(input.value());
-                                            }
-                                        })}
-                                        required=true
-                                    />
-                                </div>
-                                <div class="mb-3">
-                                <label for="amount" class="form-label">{"Amount"}</label>
-                                <input 
-                                    type="number"
-                                    class="form-control"
-                                    id="amount"
-                                    value={amount.to_string()}
-                                    oninput={Callback::from({
-                                        let amount = amount.clone();
-                                        move |e: InputEvent| {
-                                            let input: HtmlInputElement = e.target_unchecked_into();
-                                            if let Ok(val) = input.value().parse::<u64>() {
-                                                amount.set(val);
-                                            }
-                                        }
-                                    })}
-                                    min="1"
-                                    required=true
-                                />
-                                </div>
-                                <div class="mb-3">
-                                    <label for="secret" class="form-label">{"Secret (for ZK Proof)"}</label>
-                                    <input 
-                                    type="text"
-                                    class="form-control"
-                                    id="secret"
-                                    value={(*secret).clone()}
-                                    oninput={Callback::from({
-                                        let secret = secret.clone();
-                                        move |e: InputEvent| {
-                                            let input: HtmlInputElement = e.target_unchecked_into();
-                                            secret.set(input.value());
-                                        }
-                                    })}
-                                    required=true
-                                />
-                                    <div class="form-text">{"This is the secret that will be used to release funds. Keep it safe!"}</div>
-                                </div>
-                                <button type="submit" class="btn btn-primary">{"Create Deal"}</button>
-                            </form>
-                        </div>
-                    </div>
-                    
-                    // Submit Proof Form
-                    <div class="card mt-4">
-                        <div class="card-header bg-success text-white">
-                            {"Verify Proof & Release Funds"}
-                        </div>
-                        <div class="card-body">
-                            <form onsubmit={on_submit_proof}>
-                                <div class="mb-3">
-                                    <label for="dealId" class="form-label">{"Selected Deal"}</label>
-                                    <input 
-                                        type="text" 
-                                        class="form-control" 
-                                        id="dealId" 
-                                        value={(*selected_deal_id).clone()} 
-                                        disabled=true
-                                    />
-                                    <div class="form-text">{"Select a pending deal from the list"}</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="proofSecret" class="form-label">{"Secret"}</label>
-                                    <input 
-                                    type="text"
-                                    class="form-control"
-                                    id="proofSecret"
-                                    value={(*proof_secret).clone()}
-                                    oninput={Callback::from({
-                                        let proof_secret = proof_secret.clone();
-                                        move |e: InputEvent| {
-                                            let input: HtmlInputElement = e.target_unchecked_into();
-                                            proof_secret.set(input.value());
-                                        }
-                                    })}
-                                    required=true
-                                />
 
-                                </div>
-                                <button type="submit" class="btn btn-success">{"Submit Proof"}</button>
+    let handle_submit_deal = {
+        let alice = alice.clone();
+        let bob = bob.clone();
+        let amount = amount.clone();
+        let secret = secret.clone();
+
+        Callback::from(move |e: SubmitEvent| {
+            e.prevent_default();
+
+            let payload = serde_json::json!({
+                "alice": *alice,
+                "bob": *bob,
+                "amount": amount.parse::<u64>().unwrap_or(0),
+                "secret_hash": format!("{:x}", Sha256::digest(secret.as_bytes())),
+            });
+
+            spawn_local(async move {
+                if let Ok(req) = Request::post(&format!("{}/deals", API_URL))
+                    .header("Content-Type", "application/json")
+                    .body(payload.to_string())
+                {
+                    let _ = req.send().await;
+                    alert("✅ Deal created!");
+                    web_sys::window().unwrap().location().reload().unwrap();
+                }
+            });
+        })
+    };
+
+    let handle_proof_submit = {
+        let selected_deal = selected_deal.clone();
+        let secret = proof_secret.clone();
+        Callback::from(move |e: SubmitEvent| {
+            e.prevent_default();
+            if let Some(deal) = &*selected_deal {
+                let payload = SubmitProofPayload {
+                    id: deal.id.clone(),
+                    secret: (*secret).clone(),
+                };
+
+                spawn_local(async move {
+                    let res = Request::post(&format!("{}/proof", API_URL))
+                        .json(&payload).unwrap()
+                        .send().await;
+
+                    match res {
+                        Ok(resp) if resp.status() == 200 => {
+                            let updated: Option<Deal> = resp.json().await.unwrap_or(None);
+                            match updated {
+                                Some(d) => alert(&format!("✅ Proof verified! Status: {}", d.status)),
+                                None => alert("❌ Invalid proof or deal not pending"),
+                            }
+                            web_sys::window().unwrap().location().reload().unwrap();
+                        }
+                        _ => alert("⚠️ Error submitting proof."),
+                    }
+                });
+            }
+        })
+    };
+
+    let tab_class = |name: &str| {
+        if *active_tab == name {
+            "tab-button active"
+        } else {
+            "tab-button"
+        }
+    };
+
+    let switch_tab = {
+        let active_tab = active_tab.clone();
+        move |name: &'static str| {
+            let active_tab = active_tab.clone();
+            Callback::from(move |_| active_tab.set(name.to_string()))
+        }
+    };
+
+    html! {
+        <div class="container py-5">
+            <div class="text-center mb-4">
+            <div class="title-wrapper" style="font-family: 'Poppins', jetbrains-mono;" weight="1000">
+                <img src="midtrust_logo.png" alt="MidTrust Logo" style="width: 90px; height: auto;"/>
+                <h2 class="m-0">{"MidTrust"}</h2>
+            </div>
+                <p class="text-muted">{"Simulated ZK with Hash Verification"}</p>
+            </div>
+
+            <div class="d-flex justify-content-center mb-4 border-bottom tab-bar">
+                <button class={tab_class("create")} onclick={switch_tab("create")}>{"Create Deal"}</button>
+                <button class={tab_class("proof")} onclick={switch_tab("proof")}>{"Submit Proof"}</button>
+                <button class={tab_class("deals")} onclick={switch_tab("deals")}>{"Deals"}</button>
+                <button class={tab_class("about")} onclick={switch_tab("about")}>{"About"}</button>
+            </div>
+
+            <div class="glass tab-content">
+                {
+                    match &**active_tab {
+                        "create" => html! {
+                            <form class="app-card" onsubmit={handle_submit_deal}>
+                                <h5 class="mb-3 text-white text-center">{"Create New Deal"}</h5>
+                                <input type="text" placeholder="Sender" value={(*alice).clone()} oninput={input_handler(alice.clone())} />
+                                <input type="text" placeholder="Recipient" value={(*bob).clone()} oninput={input_handler(bob.clone())} />
+                                <input type="number" placeholder="Amount" value={(*amount).clone()} oninput={input_handler(amount.clone())} />
+                                <input type="text" placeholder="Secret" value={(*secret).clone()} oninput={input_handler(secret.clone())} />
+                                <button type="submit">{"Create Deal"}</button>
                             </form>
-                        </div>
-                    </div>
-                </div>
-                
-                // Deals List
-                <div class="col-md-7">
-                    <div class="card">
-                        <div class="card-header bg-info text-white">
-                            {"Active Deals"}
-                        </div>
-                        <div class="card-body">
-                            <div class="list-group">
+                        },
+                        "proof" => html! {
+                            <form class="app-card" onsubmit={handle_proof_submit}>
+                                <h5 class="mb-3 text-white text-center">{"Submit Proof"}</h5>
+                                {
+                                    if let Some(deal) = &*selected_deal {
+                                        html! { <p>{"Deal ID: "}<strong>{ &deal.id[..8] }</strong></p> }
+                                    } else {
+                                        html! { <p class="text-muted">{"Select a deal from the Deals tab first."}</p> }
+                                    }
+                                }
+                                <input type="text" placeholder="Enter secret" value={(*proof_secret).clone()} oninput={input_handler(proof_secret.clone())} />
+                                <button type="submit">{"Submit Proof"}</button>
+                            </form>
+                        },
+                        "deals" => html! {
+                            <div class="app-card">
+                                <h5 class="mb-3 text-white text-center">{"Available Deals"}</h5>
                                 {
                                     if deals.is_empty() {
-                                        html! {
-                                            <div class="alert alert-info">
-                                                {"No deals found. Create a new deal to get started."}
-                                            </div>
-                                        }
+                                        html! { <p>{"No deals yet."}</p> }
                                     } else {
-                                        deals.iter().map(|deal| {
-                                            let deal = deal.clone();
-                                            let id = deal.id.clone();
-                                            let on_select = {
-                                                let id = id.clone();
-                                                let on_select_deal = on_select_deal.clone();
-                                                Callback::from(move |_| {
-                                                    on_select_deal.emit(id.clone());
-                                                })
+                                        deals.iter().map(|d: &Deal| {
+                                            let d_id = d.id.clone();
+                                            let d_alice = d.alice.clone();
+                                            let d_bob = d.bob.clone();
+                                            let d_status = d.status.clone();
+                                            let d_for_select = d.clone();
+                                        
+                                            let set_deal = {
+                                                let selected_deal = selected_deal.clone();
+                                                Callback::from(move |_| selected_deal.set(Some(d_for_select.clone())))
                                             };
-                                            
-                                            let status_class = match deal.status.as_str() {
-                                                "Pending" => "bg-warning",
-                                                "Released" => "bg-success",
-                                                _ => "bg-secondary",
-                                            };
-                                            
+                                        
                                             html! {
-                                                <div 
-                                                    class={classes!("list-group-item", "list-group-item-action", 
-                                                        if &*selected_deal_id == &deal.id { "active" } else { "" })}
-                                                    onclick={on_select}
-                                                >
-                                                    <div class="d-flex w-100 justify-content-between">
-                                                        <h5 class="mb-1">{format!("Deal: {}", &deal.id[0..8])}</h5>
-                                                        <span class={classes!("badge", status_class)}>{&deal.status}</span>
-                                                    </div>
-                                                    <p class="mb-1">{format!("From {} to {}", &deal.alice, &deal.bob)}</p>
-                                                    <small>{format!("Amount: {}", deal.amount)}</small>
+                                                <div class="p-3 my-2 rounded bg-dark text-white" onclick={set_deal}>
+                                                    <strong>{ &d_id[..8] }</strong>{": "} { &d_alice }{" → "}{ &d_bob }
+                                                    <span class="ms-2 badge bg-info">{ d_status }</span>
                                                 </div>
                                             }
                                         }).collect::<Html>()
                                     }
                                 }
                             </div>
-                        </div>
-                    </div>
-                    
-                    // How it Works
-                    <div class="card mt-4">
-                        <div class="card-header bg-dark text-white">
-                            {"How zkP2P Works"}
-                        </div>
-                        <div class="card-body">
-                            <ol>
-                                <li><strong>{"Create Deal:"}</strong> {" Alice creates a deal with a secret. The secret is hashed client-side."}</li>
-                                <li><strong>{"Lock Funds:"}</strong> {" In a real system, funds would be locked in a smart contract."}</li>
-                                <li><strong>{"Submit Proof:"}</strong> {" Bob submits the secret, proving they know it."}</li>
-                                <li><strong>{"Verify Proof:"}</strong> {" The system verifies the hash of the secret matches."}</li>
-                                <li><strong>{"Release Funds:"}</strong> {" When verified, funds are released to Bob."}</li>
-                            </ol>
-                            <div class="alert alert-info">
-                                <strong>{"Note:"}</strong> {" In a real system, this would use real Zero-Knowledge Proofs. Here we simulate with hashes."}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                        },
+                        "about" => html! {
+                            <>
+                                <h4 class="mb-3">{"About MidTrust"}</h4>
+                                <p>{"MidTrust lets users send crypto in a trustless way, using hash-based zero-knowledge-style verification."}</p>
+                            </>
+                        },
+                        _ => html! { <p>{"Invalid tab"}</p> }
+                    }
+                }
             </div>
         </div>
     }
 }
 
-// Hash a secret using SHA-256
-fn hash_secret(secret: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(secret.as_bytes());
-    let result = hasher.finalize();
-    format!("{:x}", result)
+fn input_handler(state: UseStateHandle<String>) -> Callback<InputEvent> {
+    Callback::from(move |e: InputEvent| {
+        let input: HtmlInputElement = e.target_unchecked_into();
+        state.set(input.value());
+    })
 }
 
-// API Functions
-
-// Fetch all deals
-async fn fetch_deals() -> Result<Vec<Deal>, String> {
-    match Request::get(&format!("{}/deals", API_URL))
-        .send()
-        .await {
-            Ok(response) => {
-                if response.status() == 200 {
-                    let result = response.json::<DealsResponse>().await;
-                    match result {
-                        Ok(data) => Ok(data.deals),
-                        Err(err) => Err(format!("Failed to parse response: {}", err))
-                    }
-                } else {
-                    Err(format!("Server error: {}", response.status()))
-                }
-            },
-            Err(err) => Err(format!("Network error: {}", err))
-        }
-}
-
-// Create a new deal
-async fn create_deal(payload: CreateDealPayload) -> Result<Deal, String> {
-    match Request::post(&format!("{}/deals", API_URL))
-        .json(&payload)
-        .unwrap()
-        .send()
-        .await {
-            Ok(response) => {
-                if response.status() == 200 {
-                    let result = response.json::<Deal>().await;
-                    match result {
-                        Ok(deal) => Ok(deal),
-                        Err(err) => Err(format!("Failed to parse response: {}", err))
-                    }
-                } else {
-                    Err(format!("Server error: {}", response.status()))
-                }
-            },
-            Err(err) => Err(format!("Network error: {}", err))
-        }
-}
-
-// Submit a proof
-async fn submit_proof(payload: SubmitProofPayload) -> Result<Option<Deal>, String> {
-    match Request::post(&format!("{}/proof", API_URL))
-        .json(&payload)
-        .unwrap()
-        .send()
-        .await {
-            Ok(response) => {
-                if response.status() == 200 {
-                    let result = response.json::<Option<Deal>>().await;
-                    match result {
-                        Ok(deal) => Ok(deal),
-                        Err(err) => Err(format!("Failed to parse response: {}", err))
-                    }
-                } else {
-                    Err(format!("Server error: {}", response.status()))
-                }
-            },
-            Err(err) => Err(format!("Network error: {}", err))
-        }
-}
-
-// Main function
 fn main() {
     yew::Renderer::<App>::new().render();
 }
